@@ -1,0 +1,17 @@
+[package]
+name = "xtask"
+description = "Repository automation for PyRudder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+pyrudder-core = { path = "../crates/pyrudder-core" }
+
+[target.'cfg(windows)'.dependencies]
+pyrudder-platform-windows = { path = "../crates/pyrudder-platform-windows" }
+
+[lints]
+workspace = true

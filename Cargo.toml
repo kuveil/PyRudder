@@ -1,0 +1,33 @@
+[workspace]
+members = [
+    "crates/pyrudder-core",
+    "crates/pyrudder-cli",
+    "crates/pyrudder-shim-console",
+    "crates/pyrudder-shim-gui",
+    "crates/pyrudder-platform-windows",
+    "crates/pyrudder-provider-pythonorg",
+    "xtask",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0-alpha.7"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+expect_used = "deny"
+unwrap_used = "deny"
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

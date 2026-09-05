@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">PyRudder PR monogram / PyRudder PR 字母组合</title>
+  <desc id="description">A shared blue P structure becomes an R through one amber diagonal leg. 蓝色 P 结构通过一条琥珀色斜腿形成 R。</desc>
+
+  <circle cx="256" cy="256" r="228" fill="#0B1D2A"/>
+
+  <!-- The blue structure reads as P for Python. / 蓝色结构代表 Python 的 P。 -->
+  <path
+    fill="#4A90D9"
+    fill-rule="evenodd"
+    d="M142 104H286C364 104 410 148 410 218C410 288 364 332 286 332H218V414H142V104ZM218 170V266H282C316 266 336 248 336 218C336 188 316 170 282 170H218Z"
+  />
+
+  <!-- One added leg turns the same structure into R for Rudder. / 增加一条斜腿后形成 Rudder 的 R。 -->
+  <path d="M270 300H340L416 414H332L256 300Z" fill="#F2B544"/>
+</svg>

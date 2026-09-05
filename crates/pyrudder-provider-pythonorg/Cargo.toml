@@ -1,0 +1,23 @@
+[package]
+name = "pyrudder-provider-pythonorg"
+description = "Python.org runtime provider for PyRudder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+pyrudder-core = { path = "../pyrudder-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "system-proxy"] }
+zip = { version = "4.6", default-features = false, features = ["deflate"] }
+tempfile = "3.23"
+
+[target.'cfg(windows)'.dependencies]
+pyrudder-platform-windows = { path = "../pyrudder-platform-windows" }
+
+[lints]
+workspace = true

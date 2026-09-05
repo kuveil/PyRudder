@@ -1,0 +1,98 @@
+name: Version branch release
+
+on:
+  push:
+    branches:
+      - 'release/*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    if: >-
+      github.ref_type == 'branch' &&
+      startsWith(github.ref_name, 'release/')
+    runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate release branch and package version
+        id: version
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: ./scripts/release-version.ps1 -Ref $env:RELEASE_REF -WriteGitHubOutput
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt,rust-docs
+          targets: x86_64-pc-windows-msvc
+      - name: Check release safeguards
+        run: |
+          ./scripts/tests/release-validation.ps1
+          ./scripts/tests/release-publish-tests.ps1
+          ./scripts/tests/package-validation.ps1
+          ./scripts/tests/package-notices.Tests.ps1
+      - name: Check formatting
+        run: |
+          cargo fmt --all --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run Clippy
+        run: |
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run tests
+        run: |
+          cargo test --workspace --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build privacy-checked release packages
+        run: |
+          ./scripts/prepare-installer-tools.ps1
+          ./scripts/package.ps1 -Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: |
+            target/dist/*.zip
+            target/dist/*.zip.sha256
+            target/dist/*-Setup.exe
+            target/dist/*-Setup.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: pyrudder-release-${{ needs.build.outputs.version }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.version }}-${{ github.sha }}
+          path: target/dist
+      - name: Publish or safely resume the same release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_REF: ${{ github.ref }}
+        run: >-
+          ./scripts/release-publish.ps1
+          -Repository $env:RELEASE_REPOSITORY
+          -Commit $env:RELEASE_COMMIT
+          -Ref $env:RELEASE_REF

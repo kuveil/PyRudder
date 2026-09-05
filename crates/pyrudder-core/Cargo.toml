@@ -1,0 +1,18 @@
+[package]
+name = "pyrudder-core"
+description = "Platform-independent domain model for PyRudder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+config-toml = ["dep:serde", "dep:toml"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"], optional = true }
+toml = { version = "0.8.23", default-features = false, features = ["parse"], optional = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,10 @@
+/target/
+/.idea/
+/local-docs/
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.exe
+*.tmp
+*.part
