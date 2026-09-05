@@ -52,6 +52,14 @@ function Assert-ReleaseAssetSet {
 
 function Assert-ReleaseIdentity {
     param([Parameter(Mandatory)][object]$Release, [Parameter(Mandatory)][string]$Tag, [Parameter(Mandatory)][string]$Commit)
+    foreach ($releaseProperty in @('tag_name', 'target_commitish', 'draft', 'prerelease', 'assets')) {
+        if ($Release.PSObject.Properties.Name -notcontains $releaseProperty) {
+            throw 'Release response is missing required state / 发布响应缺少必要状态'
+        }
+    }
+    if ($Release.draft -isnot [bool] -or $Release.prerelease -isnot [bool] -or $Release.assets -isnot [array]) {
+        throw 'Release response has invalid state types / 发布响应的状态类型错误'
+    }
     if ($Release.tag_name -cne $Tag -or $Release.target_commitish -cne $Commit) {
         throw 'This version already belongs to another source revision; increment the version / 此版本已属于其他源码提交，请提升版本号'
     }

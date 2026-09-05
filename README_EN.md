@@ -13,7 +13,7 @@
 
 PyRudder is a Python version manager for Windows. Register existing Python installations or download official Python, select a version with `pyrudder`, and keep using ordinary commands such as `python` and `pip`.
 
-Current version: `0.1.0-alpha.7` for Windows 10/11 x64. This is an unsigned public prerelease; try it in a development environment first. After installation, PyRudder is CLI-only: no desktop app, tray, background service, or shell initialization script.
+Current version: `0.1.0-alpha.8` for Windows 10/11 x64. This is an unsigned public prerelease; try it in a development environment first. After installation, PyRudder is CLI-only: no desktop app, tray, background service, or shell initialization script.
 
 ## 1. Install PyRudder
 

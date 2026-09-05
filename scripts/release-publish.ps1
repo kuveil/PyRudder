@@ -50,8 +50,47 @@ function Invoke-ReleaseGh {
 }
 
 function Get-ReleaseRemote {
+    param([switch]$Required)
     $releaseRemoteJson = Invoke-ReleaseGh -Arguments @('api', "repos/$Repository/releases/tags/$releaseTag") -AllowNotFound
-    if ($releaseRemoteJson) { $releaseRemoteJson | ConvertFrom-Json }
+    if ($releaseRemoteJson) {
+        $releasePublished = $releaseRemoteJson | ConvertFrom-Json
+        if ($null -eq $releasePublished -or $releasePublished -is [array]) { throw 'Invalid published release response / 已发布版本响应无效' }
+        return $releasePublished
+    }
+
+    # The tag endpoint returns published releases only; discover drafts through the full list.
+    # 按标签查询的接口仅返回已发布版本；通过完整列表发现草稿。
+    $releasePagesJson = Invoke-ReleaseGh -Arguments @('api', "repos/$Repository/releases?per_page=100", '--paginate', '--slurp')
+    if ([string]::IsNullOrWhiteSpace($releasePagesJson)) { throw 'Empty release list response / 发布列表响应为空' }
+    $releasePages = ConvertFrom-Json -InputObject $releasePagesJson -NoEnumerate
+    if ($releasePages -isnot [array]) { throw 'Invalid paginated release list / 分页发布列表格式错误' }
+    $releaseMatches = [Collections.Generic.List[object]]::new()
+    foreach ($releasePage in $releasePages) {
+        if ($releasePage -isnot [array]) { throw 'Invalid release list page / 发布列表页格式错误' }
+        foreach ($releaseCandidate in $releasePage) {
+            if ($null -eq $releaseCandidate -or $releaseCandidate.PSObject.Properties.Name -notcontains 'tag_name' -or
+                $releaseCandidate.tag_name -isnot [string] -or [string]::IsNullOrWhiteSpace($releaseCandidate.tag_name)) {
+                throw 'Release list entry has no tag / 发布列表条目缺少标签'
+            }
+            if ($releaseCandidate.tag_name -ceq $releaseTag) { $releaseMatches.Add($releaseCandidate) }
+        }
+    }
+    if ($releaseMatches.Count -gt 1) { throw 'Multiple releases use this tag; review them before retrying / 多个发布使用同一标签，请核对后重试' }
+    if ($releaseMatches.Count -eq 1) {
+        $releaseDraftId = $releaseMatches[0].id
+        if ([string]$releaseDraftId -cnotmatch '\A[1-9][0-9]*\z') { throw 'Invalid release ID / 发布 ID 无效' }
+        # Read by numeric ID to obtain fresh draft state; do not hide permission or deletion errors.
+        # 按数字 ID 获取最新草稿状态，不隐藏权限或删除错误。
+        $releaseDraftJson = Invoke-ReleaseGh -Arguments @('api', "repos/$Repository/releases/$releaseDraftId")
+        if ([string]::IsNullOrWhiteSpace($releaseDraftJson)) { throw 'Empty draft release response / 草稿发布响应为空' }
+        $releaseDraft = $releaseDraftJson | ConvertFrom-Json
+        if ($null -eq $releaseDraft -or $releaseDraft.id -ne $releaseDraftId -or $releaseDraft.tag_name -cne $releaseTag) {
+            throw 'Draft release identity changed during lookup / 查询期间草稿身份发生变化'
+        }
+        return $releaseDraft
+    }
+    if ($Required) { throw 'Expected release is not visible; check token permissions and retry the same commit / 未找到预期发布，请检查令牌权限并使用同一提交重试' }
+    return $null
 }
 
 function Get-ReleaseTagCommit {
@@ -137,7 +176,7 @@ The Setup executable is recommended. A portable ZIP and SHA256 checksum files ar
         '--draft', '--title', "PyRudder $releaseVersion", '--notes-file', $releaseNotesPath)
     if ($releaseVersionInfo.Prerelease) { $releaseCreateArguments += '--prerelease' }
     $null = Invoke-ReleaseGh -Arguments $releaseCreateArguments
-    $releaseExisting = Get-ReleaseRemote
+    $releaseExisting = Get-ReleaseRemote -Required
 }
 Assert-ReleaseIdentity -Release $releaseExisting -Tag $releaseTag -Commit $Commit
 Assert-ReleaseAssetSet -Assets @($releaseExisting.assets) -ExpectedNames $releaseExpectedNames -Complete:(-not $releaseExisting.draft)
@@ -174,7 +213,7 @@ foreach ($releasePayloadName in @($releaseExpectedNames[0], $releaseExpectedName
 # Validate the complete remote set before changing a draft to a public release.
 # 将草稿转为公开发布前，复核完整的远程附件集合。
 Assert-ReleaseRemoteTag
-$releaseComplete = Get-ReleaseRemote
+$releaseComplete = Get-ReleaseRemote -Required
 Assert-ReleaseIdentity -Release $releaseComplete -Tag $releaseTag -Commit $Commit
 Assert-ReleaseAssetSet -Assets @($releaseComplete.assets) -ExpectedNames $releaseExpectedNames -Complete
 $releaseVerifiedDirectory = Join-Path $releaseWork 'verified'
