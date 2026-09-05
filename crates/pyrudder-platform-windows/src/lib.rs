@@ -38,6 +38,9 @@ pub mod state;
 pub mod storage;
 
 #[cfg(windows)]
+pub mod installation;
+
+#[cfg(windows)]
 pub mod registry;
 
 #[cfg(windows)]

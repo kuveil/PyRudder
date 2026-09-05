@@ -89,14 +89,23 @@ fn run(arguments: &Arguments) {
             env!("CARGO_PKG_VERSION")
         );
     }
-    let result = app::App::load(arguments).and_then(|application| {
-        application.execute(
-            arguments
-                .command
-                .as_ref()
-                .ok_or_else(|| app::usage("Missing command"))?,
-        )
-    });
+    let result = if let Some(arguments::Action::Installer {
+        root,
+        phase,
+        from_version,
+    }) = &arguments.command
+    {
+        app::installer::run(arguments, root, *phase, from_version.as_deref())
+    } else {
+        app::App::load(arguments).and_then(|application| {
+            application.execute(
+                arguments
+                    .command
+                    .as_ref()
+                    .ok_or_else(|| app::usage("Missing command"))?,
+            )
+        })
+    };
     match result {
         Ok(app::Outcome::Child(code)) => std::process::exit(code),
         Ok(app::Outcome::Text(text)) => println!("{text}"),

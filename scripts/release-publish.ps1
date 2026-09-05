@@ -156,8 +156,9 @@ PyRudder $releaseVersion：适用于 Windows x64 的 Python 版本管理 CLI。
 - 使用 ``pyrudder register`` 接管已有 Python，使用 ``pyrudder available`` 上下选择并安装官方版本。
 - 安装时可以指定目录，留空使用 PyRudder 下的默认目录；下载显示进度。
 - 使用 ``pyrudder global`` 切换全局版本，使用 ``pyrudder local`` 固定项目版本。
+- 从 ``0.1.0`` 起，安装包支持沿用原目录更新；Alpha 系列需先备份、卸载，再选择新的空目录安装。
 
-推荐下载安装程序 ``pyrudder-$releaseVersion-windows-x64-Setup.exe``。也提供便携 ZIP 及 SHA256 摘要文件。此预览版本未进行代码签名，Windows 可能显示安全提醒。完整教程见中文 README。
+推荐下载安装程序 ``pyrudder-$releaseVersion-windows-x64-Setup.exe``。也提供便携 ZIP 及 SHA256 摘要文件。Windows 程序未进行代码签名，系统可能显示安全提醒。请阅读 [安装与更新说明](https://github.com/$Repository/blob/$Commit/README.md#更新已有安装)。
 
 ## English
 
@@ -167,8 +168,9 @@ PyRudder $releaseVersion is a Python version manager for Windows x64, used entir
 - Register existing Python installations with ``pyrudder register``, or choose official versions interactively with ``pyrudder available``.
 - Choose a runtime directory or accept the default inside PyRudder; follow the download progress.
 - Switch the global Python version with ``pyrudder global`` or pin a project with ``pyrudder local``.
+- Starting with ``0.1.0``, installers support updates in the original directory. For Alpha versions, back up your data, uninstall, then install into a new empty directory.
 
-The Setup executable is recommended. A portable ZIP and SHA256 checksum files are also available. This preview is not code-signed, so Windows may show a security warning. See the English README for the complete guide.
+The Setup executable is recommended. A portable ZIP and SHA256 checksum files are also available. Windows programs are not code-signed, so the system may show a security warning. See the [installation and update guide](https://github.com/$Repository/blob/$Commit/README_EN.md#update-an-existing-installation).
 "@
     $releaseNotesPath = Join-Path $releaseWork 'release-notes.md'
     [IO.File]::WriteAllText($releaseNotesPath, $releaseNotes, $releaseUtf8)
