@@ -67,6 +67,8 @@ cargo test --workspace --locked
 
 Changes to the installer, PATH handling, version switching, or downloads also need relevant behavioral testing in an isolated environment. Do not run destructive tests against your everyday Python installations or system environment. State any checks you did not run, and why, in the PR.
 
+For installer upgrade regression testing, run `scripts/tests/installer-upgrade.Tests.ps1` with explicit `-OldPayload`, `-NewPayload` (complete unpacked directories with different binaries), `-InnoCompiler`, and `-PythonDirectory` arguments. The old version must be at least `0.1.0`, and the new version must not be older. The test uses a separate installation identity and disposable directories under `target/`, opts out of PATH changes, and invokes its test uninstaller afterward. It checks directory detection, data preservation, failure recovery, same-version repair, and downgrade rejection. Existing Python is used only for registration and command checks; its installation contents are not modified.
+
 Use commit messages in the form `type(scope): feature or fix`, such as `fix(shim): preserve child exit codes` or `docs(readme): clarify installation options`. Keep each commit focused on one concern and avoid unrelated formatting or refactoring.
 
 ## Documentation, privacy, and licensing
@@ -81,9 +83,9 @@ Use commit messages in the form `type(scope): feature or fix`, such as `fix(shim
 ## Maintainers: releases and branch protection
 
 1. Integrate ordinary features and fixes into `develop` through PRs. Before release, update the Cargo workspace version, relevant lockfile versions, and public documentation on the branch being prepared, then complete review and local verification.
-2. Create `release/<version>` from the exact reviewed commit only when ready to publish: use `develop` for ordinary releases, or `hotfix/*` for an urgent release without unfinished features. The branch version must exactly match the Cargo workspace version; for example, the next prerelease could use `release/0.1.0-alpha.8`. **Pushing triggers public release automatically, without a separate publication approval.**
+2. Create `release/<version>` from the exact reviewed commit only when ready to publish: use `develop` for ordinary releases, or `hotfix/*` for an urgent release without unfinished features. The branch version must exactly match the Cargo workspace version, for example `release/0.1.0`; a subsequent patch could use `release/0.1.1`. **Pushing triggers public release automatically, without a separate publication approval.**
 3. After successful validation, the workflow creates the `v<version>` tag and Release, marking versions with prerelease identifiers as prereleases. Verify the published artifacts and outcome, then merge the release branch into `master`.
-4. Treat released branches and tags as read-only snapshots: do not append commits, rewrite them, or force-push. A version cannot be reused for another commit. Return subsequent fixes to `develop`, increment the version, and create a new release branch. Keep the existing `release/0.1.0-alpha.7` unchanged.
+4. Treat released branches and tags as read-only snapshots: do not append commits, rewrite them, or force-push. A version cannot be reused for another commit. Return subsequent fixes to `develop`, increment the version, and create a new release branch. Keep historical prerelease branches and tags unchanged as well.
 5. Start urgent fixes from `master` on `hotfix/*`, review them, and publish a new version through the process above. After release verification, merge into `master` and synchronize the fixes into `develop` through a PR, preserving any newer version already planned on the development line. Do not leave fixes only on `master` or push them directly to an old release branch.
 
 Maintainers should set `master` as the default branch in GitHub repository settings, require PRs for `master` and `develop`, and prevent force-pushes and deletion. Restrict changes to release branches and tags. With `master` as the default, contributors must still select `develop` for ordinary PRs.

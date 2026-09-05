@@ -13,7 +13,7 @@
 
 PyRudder is a Python version manager for Windows. Register existing Python installations or download official Python, select a version with `pyrudder`, and keep using ordinary commands such as `python` and `pip`.
 
-Current version: `0.1.0-alpha.7` for Windows 10/11 x64. This is an unsigned public prerelease; try it in a development environment first. After installation, PyRudder is CLI-only: no desktop app, tray, background service, or shell initialization script.
+Source version: `0.1.0` for Windows 10/11 x64; see [GitHub Releases](https://github.com/kuveil/PyRudder/releases) for downloadable versions. Windows installers are not yet code-signed. After installation, PyRudder is CLI-only: no desktop app, tray, background service, or shell initialization script.
 
 ## 1. Install PyRudder
 
@@ -21,11 +21,11 @@ Download the installer or ZIP for your version from [GitHub Releases](https://gi
 
 ### Installer (recommended)
 
-Open `pyrudder-…-Setup.exe`, choose the interface language, and select a new empty directory, such as `D:\Tools\PyRudder`.
+For a first installation, open `pyrudder-…-Setup.exe`, choose the interface language, and select a new empty directory, such as `D:\Tools\PyRudder`. See "Update an existing installation" below for updates from `0.1.0` onward; Alpha versions require a fresh installation as described there.
 
 “Add PyRudder to system PATH” is checked by default and can be cleared. When selected, setup requests Administrator permission, appends `bin` and `shims` to system PATH, and removes only the installing account's `WindowsApps` entry from system PATH. It does not modify user PATH or delete Store apps or the WindowsApps directory. When cleared, PATH is unchanged and the finish page shows the two directories to configure manually.
 
-System PATH affects every local user and Administrator terminal, while the installation directory remains controlled by the installing account. This creates cross-user command-resolution risks; enable this option only on a trusted single-user development machine. If automatic configuration fails or elevation is cancelled, setup reports an incomplete installation. Uninstall it before trying again.
+System PATH affects every local user and Administrator terminal, while the installation directory remains controlled by the installing account. This creates cross-user command-resolution risks; enable this option only on a trusted single-user development machine. If automatic configuration fails or elevation is cancelled, setup reports an incomplete installation. You do not need to uninstall first: run the installer again in the same directory, or retry PATH configuration with `pyrudder path add`.
 
 After installation, fully close and reopen your terminal, including hosts such as Windows Terminal or VS Code, then run:
 
@@ -34,6 +34,31 @@ pyrudder --version
 ~~~
 
 Without PATH configuration, use the full path to `pyrudder.exe` inside `bin`. You can later run `pyrudder path add` to apply the system PATH configuration above with Administrator permission.
+
+### Update an existing installation
+
+`0.1.0` establishes a new installation baseline and does not take over Alpha installations. If you used `0.1.0-alpha.8` or another Alpha version, back up any data you need, uninstall the old program, install `0.1.0` into a new empty directory, and register existing Python again. Directories retained after uninstall are not taken over automatically.
+
+Starting with `0.1.0`, the installer supports updates in the original directory under the same Windows account. Running the same installer version again can also repair an installation. When a newer version is released:
+
+1. Download the newer `pyrudder-…-Setup.exe` from [GitHub Releases](https://github.com/kuveil/PyRudder/releases). Do not uninstall the old version first.
+2. Finish running PyRudder commands and stop Python, pip, and other processes launched through PyRudder. Close related terminals, editors, and Jupyter sessions when needed.
+3. Run the new installer as the original installing account. The wizard detects the previous installation directory and updates it in place, without asking you to locate or enter it again. Choosing another installation directory during an update is not supported.
+4. Confirm the PATH option and complete setup. The wizard defaults to the selection from the previous installation. Clearing the option leaves the current PATH unchanged; it does not remove existing PATH entries.
+5. Fully close and reopen your terminal, then check the version, registrations, and selection:
+
+~~~text
+pyrudder --version
+pyrudder list
+pyrudder current --explain
+python --version
+~~~
+
+The update replaces PyRudder programs and refreshes command entry points while retaining configuration, Python registrations, aliases, the global selection, caches, managed Python, and custom runtime and download directories. Existing Python is not downloaded again; external Python and project selection files are not deleted. System PATH management records are preserved so a later uninstall can still reverse changes managed by this installation. After closing an old terminal, set any temporary `pyrudder shell` selection again in the new terminal if needed.
+
+Updates back up programs and command entry-point information and automatically attempt to restore them on failure. If files are reported as in use, close the related processes before retrying. You should still back up important data before updating.
+
+The installer rejects downgrades. Updating cannot migrate the installation directory, create multiple installer-managed copies, or take over another account's installation. If a complete supported installation cannot be identified, back up your data and check the installation state instead of manually overwriting files. Updates require downloading and running the new installer; PyRudder does not automatically check for or download updates. Portable ZIP overwrite upgrades are not supported.
 
 ### Portable ZIP
 
@@ -128,14 +153,14 @@ Installer users can remove PyRudder through Windows Installed apps. Uninstall re
 
 ZIP users should run `pyrudder path remove` to reverse this installation's PATH changes, then handle the extracted directory and any data they want to retain. Remove manually configured PATH entries yourself.
 
-This version does not support overwrite upgrades, automatic migration, or multiple installer-managed copies. Uninstall an older edition, back up any data you need, then install into a new empty directory and register existing Python again.
+For routine updates from `0.1.0` onward, run the newer installer without uninstalling first. Alpha versions require a backup and fresh installation as described above. Data retained after uninstall is not a complete installed application. To redeploy or change the directory, back up any data you need, uninstall the old program, install into a new empty directory, and register existing Python again. Automatic migration and multiple installer-managed copies are not supported.
 
 ## FAQ and supported scope
 
 - **Does `python` still open the Store or run another version?** Fully exit and reopen the terminal host, and confirm setup did not report a PATH failure. PyRudder appends system PATH; it does not guarantee precedence over every existing system Python, terminal alias, or virtual environment. Use `pyrudder doctor` for diagnostics and `pyrudder which python` for the selected target. `pyrudder exec -- python --version` explicitly runs through PyRudder. Do not delete the WindowsApps directory.
 - **Is a version or command missing?** Check registrations with `pyrudder list` and selection with `pyrudder current --explain`. Missing commands in the selected version do not fall back to another Python. Run `pyrudder rehash` if newly installed commands are not visible.
 - **Was a download or installation interrupted?** Retry the original command. `pyrudder recover` reports unfinished operations. Check what data is needed before cleanup; do not manually delete a runtime in use.
-- Supported targets are Windows 10/11 x64, PowerShell/CMD, and stable standard CPython x64. PyRudder does not take over `py.exe`. System Python fallback, ARM64/x86, Git Bash, PyPy, prerelease or free-threaded Python, network/reparse-point directories, self-update, and installation-directory migration are not supported. Run only Python installations and scripts you trust.
+- Supported targets are Windows 10/11 x64, PowerShell/CMD, and stable standard CPython x64. PyRudder does not take over `py.exe`. System Python fallback, ARM64/x86, Git Bash, PyPy, prerelease or free-threaded Python, network/reparse-point directories, online self-update, ZIP overwrite upgrades, and installation-directory migration are not supported. Run only Python installations and scripts you trust.
 
 See `pyrudder --help` or `pyrudder <command> --help` for more options. Before reporting an issue, review diagnostics and remove personal paths, account information, and other sensitive data.
 

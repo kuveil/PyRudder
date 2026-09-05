@@ -52,7 +52,7 @@ impl App {
                 if section == "commands" {
                     if value != "false" {
                         return Err(usage(
-                            "System fallback is not enabled in this test build; use false",
+                            "System fallback is not supported; use false / 不支持系统回退，请使用 false",
                         ));
                     }
                     Ok(toml::Value::Boolean(false))

@@ -50,6 +50,16 @@ pub(crate) enum Shell {
     Cmd,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum InstallerPhase {
+    Check,
+    Prepare,
+    Finish,
+    Commit,
+    Rollback,
+    RecoveryComplete,
+}
+
 #[derive(Subcommand)]
 pub(crate) enum PathAction {
     /// Add bin and shims to system PATH. / 将 bin 和 shims 加入系统 PATH。
@@ -60,6 +70,17 @@ pub(crate) enum PathAction {
 
 #[derive(Subcommand)]
 pub(crate) enum Action {
+    /// Installer-only orchestration; never used for network self-update.
+    /// 仅供安装器编排，不用于网络自更新。
+    #[command(name = "__installer", hide = true)]
+    Installer {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long, value_enum)]
+        phase: InstallerPhase,
+        #[arg(long)]
+        from_version: Option<String>,
+    },
     /// Install the CLI and initialize local state. / 安装 CLI 并初始化本地状态。
     Setup {
         #[arg(long)]

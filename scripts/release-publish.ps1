@@ -50,8 +50,47 @@ function Invoke-ReleaseGh {
 }
 
 function Get-ReleaseRemote {
+    param([switch]$Required)
     $releaseRemoteJson = Invoke-ReleaseGh -Arguments @('api', "repos/$Repository/releases/tags/$releaseTag") -AllowNotFound
-    if ($releaseRemoteJson) { $releaseRemoteJson | ConvertFrom-Json }
+    if ($releaseRemoteJson) {
+        $releasePublished = $releaseRemoteJson | ConvertFrom-Json
+        if ($null -eq $releasePublished -or $releasePublished -is [array]) { throw 'Invalid published release response / 已发布版本响应无效' }
+        return $releasePublished
+    }
+
+    # The tag endpoint returns published releases only; discover drafts through the full list.
+    # 按标签查询的接口仅返回已发布版本；通过完整列表发现草稿。
+    $releasePagesJson = Invoke-ReleaseGh -Arguments @('api', "repos/$Repository/releases?per_page=100", '--paginate', '--slurp')
+    if ([string]::IsNullOrWhiteSpace($releasePagesJson)) { throw 'Empty release list response / 发布列表响应为空' }
+    $releasePages = ConvertFrom-Json -InputObject $releasePagesJson -NoEnumerate
+    if ($releasePages -isnot [array]) { throw 'Invalid paginated release list / 分页发布列表格式错误' }
+    $releaseMatches = [Collections.Generic.List[object]]::new()
+    foreach ($releasePage in $releasePages) {
+        if ($releasePage -isnot [array]) { throw 'Invalid release list page / 发布列表页格式错误' }
+        foreach ($releaseCandidate in $releasePage) {
+            if ($null -eq $releaseCandidate -or $releaseCandidate.PSObject.Properties.Name -notcontains 'tag_name' -or
+                $releaseCandidate.tag_name -isnot [string] -or [string]::IsNullOrWhiteSpace($releaseCandidate.tag_name)) {
+                throw 'Release list entry has no tag / 发布列表条目缺少标签'
+            }
+            if ($releaseCandidate.tag_name -ceq $releaseTag) { $releaseMatches.Add($releaseCandidate) }
+        }
+    }
+    if ($releaseMatches.Count -gt 1) { throw 'Multiple releases use this tag; review them before retrying / 多个发布使用同一标签，请核对后重试' }
+    if ($releaseMatches.Count -eq 1) {
+        $releaseDraftId = $releaseMatches[0].id
+        if ([string]$releaseDraftId -cnotmatch '\A[1-9][0-9]*\z') { throw 'Invalid release ID / 发布 ID 无效' }
+        # Read by numeric ID to obtain fresh draft state; do not hide permission or deletion errors.
+        # 按数字 ID 获取最新草稿状态，不隐藏权限或删除错误。
+        $releaseDraftJson = Invoke-ReleaseGh -Arguments @('api', "repos/$Repository/releases/$releaseDraftId")
+        if ([string]::IsNullOrWhiteSpace($releaseDraftJson)) { throw 'Empty draft release response / 草稿发布响应为空' }
+        $releaseDraft = $releaseDraftJson | ConvertFrom-Json
+        if ($null -eq $releaseDraft -or $releaseDraft.id -ne $releaseDraftId -or $releaseDraft.tag_name -cne $releaseTag) {
+            throw 'Draft release identity changed during lookup / 查询期间草稿身份发生变化'
+        }
+        return $releaseDraft
+    }
+    if ($Required) { throw 'Expected release is not visible; check token permissions and retry the same commit / 未找到预期发布，请检查令牌权限并使用同一提交重试' }
+    return $null
 }
 
 function Get-ReleaseTagCommit {
@@ -117,8 +156,9 @@ PyRudder $releaseVersion：适用于 Windows x64 的 Python 版本管理 CLI。
 - 使用 ``pyrudder register`` 接管已有 Python，使用 ``pyrudder available`` 上下选择并安装官方版本。
 - 安装时可以指定目录，留空使用 PyRudder 下的默认目录；下载显示进度。
 - 使用 ``pyrudder global`` 切换全局版本，使用 ``pyrudder local`` 固定项目版本。
+- 从 ``0.1.0`` 起，安装包支持沿用原目录更新；Alpha 系列需先备份、卸载，再选择新的空目录安装。
 
-推荐下载安装程序 ``pyrudder-$releaseVersion-windows-x64-Setup.exe``。也提供便携 ZIP 及 SHA256 摘要文件。此预览版本未进行代码签名，Windows 可能显示安全提醒。完整教程见中文 README。
+推荐下载安装程序 ``pyrudder-$releaseVersion-windows-x64-Setup.exe``。也提供便携 ZIP 及 SHA256 摘要文件。Windows 程序未进行代码签名，系统可能显示安全提醒。请阅读 [安装与更新说明](https://github.com/$Repository/blob/$Commit/README.md#更新已有安装)。
 
 ## English
 
@@ -128,8 +168,9 @@ PyRudder $releaseVersion is a Python version manager for Windows x64, used entir
 - Register existing Python installations with ``pyrudder register``, or choose official versions interactively with ``pyrudder available``.
 - Choose a runtime directory or accept the default inside PyRudder; follow the download progress.
 - Switch the global Python version with ``pyrudder global`` or pin a project with ``pyrudder local``.
+- Starting with ``0.1.0``, installers support updates in the original directory. For Alpha versions, back up your data, uninstall, then install into a new empty directory.
 
-The Setup executable is recommended. A portable ZIP and SHA256 checksum files are also available. This preview is not code-signed, so Windows may show a security warning. See the English README for the complete guide.
+The Setup executable is recommended. A portable ZIP and SHA256 checksum files are also available. Windows programs are not code-signed, so the system may show a security warning. See the [installation and update guide](https://github.com/$Repository/blob/$Commit/README_EN.md#update-an-existing-installation).
 "@
     $releaseNotesPath = Join-Path $releaseWork 'release-notes.md'
     [IO.File]::WriteAllText($releaseNotesPath, $releaseNotes, $releaseUtf8)
@@ -137,7 +178,7 @@ The Setup executable is recommended. A portable ZIP and SHA256 checksum files ar
         '--draft', '--title', "PyRudder $releaseVersion", '--notes-file', $releaseNotesPath)
     if ($releaseVersionInfo.Prerelease) { $releaseCreateArguments += '--prerelease' }
     $null = Invoke-ReleaseGh -Arguments $releaseCreateArguments
-    $releaseExisting = Get-ReleaseRemote
+    $releaseExisting = Get-ReleaseRemote -Required
 }
 Assert-ReleaseIdentity -Release $releaseExisting -Tag $releaseTag -Commit $Commit
 Assert-ReleaseAssetSet -Assets @($releaseExisting.assets) -ExpectedNames $releaseExpectedNames -Complete:(-not $releaseExisting.draft)
@@ -174,7 +215,7 @@ foreach ($releasePayloadName in @($releaseExpectedNames[0], $releaseExpectedName
 # Validate the complete remote set before changing a draft to a public release.
 # 将草稿转为公开发布前，复核完整的远程附件集合。
 Assert-ReleaseRemoteTag
-$releaseComplete = Get-ReleaseRemote
+$releaseComplete = Get-ReleaseRemote -Required
 Assert-ReleaseIdentity -Release $releaseComplete -Tag $releaseTag -Commit $Commit
 Assert-ReleaseAssetSet -Assets @($releaseComplete.assets) -ExpectedNames $releaseExpectedNames -Complete
 $releaseVerifiedDirectory = Join-Path $releaseWork 'verified'

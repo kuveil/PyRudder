@@ -10,6 +10,9 @@ $releaseValidationManifest = Join-Path $PSScriptRoot '../../Cargo.toml'
 $releaseValidationText = Get-Content -LiteralPath $releaseValidationManifest -Raw
 $releaseValidationVersion = [regex]::Match($releaseValidationText, '(?m)^version\s*=\s*"([^"\r\n]+)"').Groups[1].Value
 if (-not $releaseValidationVersion) { throw 'Cannot read test version / 无法读取测试版本' }
+# Mismatch fixtures must remain different when the workspace version changes.
+# 工作区版本变化后，不匹配测试值仍须与其保持不同。
+$releaseValidationOtherVersion = if ($releaseValidationVersion -ceq '0.0.0') { '0.0.1' } else { '0.0.0' }
 foreach ($releaseValidationPrefix in @('release/')) {
     $releaseValidationResult = & $releaseValidationScript -Ref "refs/heads/$releaseValidationPrefix$releaseValidationVersion"
     if ($releaseValidationResult.Version -cne $releaseValidationVersion -or $releaseValidationResult.Tag -cne "v$releaseValidationVersion") {
@@ -19,7 +22,7 @@ foreach ($releaseValidationPrefix in @('release/')) {
 foreach ($releaseValidationRef in @(
     'refs/heads/master', 'refs/heads/main', 'refs/heads/feature/example',
     "refs/tags/v$releaseValidationVersion", "refs/heads/release/v$releaseValidationVersion",
-    'refs/heads/release/0.0.0', "refs/heads/release/$releaseValidationVersion/extra",
+    "refs/heads/release/$releaseValidationOtherVersion", "refs/heads/release/$releaseValidationVersion/extra",
     "refs/heads/RELEASE/$releaseValidationVersion", "refs/heads/release/$releaseValidationVersion`n"
 )) {
     $releaseValidationRejected = $false
@@ -54,7 +57,7 @@ foreach ($releaseTestVersion in @('01.2.3', '1.02.3', '1.2.03', '1.2.3-alpha.01'
     Assert-ReleaseTestRejected { & $releaseValidationScript -Ref "refs/heads/release/$releaseTestVersion" -ManifestPath $releaseTestManifest }
     $releaseTestCount++
 }
-$releaseTestNames = @(Get-ReleaseAssetNames -Version '0.1.0-alpha.7')
+$releaseTestNames = @(Get-ReleaseAssetNames -Version $releaseValidationVersion)
 $releaseTestAssets = @($releaseTestNames | ForEach-Object { [pscustomobject]@{ name = $_ } })
 Assert-ReleaseAssetSet -Assets $releaseTestAssets -ExpectedNames $releaseTestNames -Complete
 Assert-ReleaseAssetSet -Assets @() -ExpectedNames $releaseTestNames
@@ -64,11 +67,31 @@ Assert-ReleaseTestRejected { Assert-ReleaseAssetSet -Assets @([pscustomobject]@{
 $releaseTestCount += 5
 $releaseTestCommit = '1234567890123456789012345678901234567890'
 $releaseTestOtherCommit = 'abcdefabcdefabcdefabcdefabcdefabcdefabcd'
-$releaseTestRemote = [pscustomobject]@{ tag_name = 'v0.1.0-alpha.7'; target_commitish = $releaseTestCommit }
-Assert-ReleaseIdentity -Release $releaseTestRemote -Tag 'v0.1.0-alpha.7' -Commit $releaseTestCommit
-Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestRemote -Tag 'v0.1.0-alpha.7' -Commit $releaseTestOtherCommit }
-Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestRemote -Tag 'v0.1.0' -Commit $releaseTestCommit }
+$releaseTestTag = "v$releaseValidationVersion"
+$releaseTestRemote = [pscustomobject]@{
+    tag_name = $releaseTestTag; target_commitish = $releaseTestCommit
+    draft = $true; prerelease = $true; assets = @()
+}
+Assert-ReleaseIdentity -Release $releaseTestRemote -Tag $releaseTestTag -Commit $releaseTestCommit
+Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestRemote -Tag $releaseTestTag -Commit $releaseTestOtherCommit }
+Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestRemote -Tag "v$releaseValidationOtherVersion" -Commit $releaseTestCommit }
 $releaseTestCount += 3
+foreach ($releaseTestField in @('tag_name', 'target_commitish', 'draft', 'prerelease', 'assets')) {
+    $releaseTestInvalid = $releaseTestRemote | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $releaseTestInvalid.PSObject.Properties.Remove($releaseTestField)
+    Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestInvalid -Tag $releaseTestTag -Commit $releaseTestCommit }
+    $releaseTestCount++
+}
+foreach ($releaseTestInvalidField in @(
+    @{ Name = 'draft'; Value = 'false' }, @{ Name = 'draft'; Value = $null },
+    @{ Name = 'prerelease'; Value = 1 }, @{ Name = 'prerelease'; Value = $null },
+    @{ Name = 'assets'; Value = $null }, @{ Name = 'assets'; Value = [pscustomobject]@{ name = 'sample.zip' } }
+)) {
+    $releaseTestInvalid = $releaseTestRemote | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $releaseTestInvalid.($releaseTestInvalidField.Name) = $releaseTestInvalidField.Value
+    Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestInvalid -Tag $releaseTestTag -Commit $releaseTestCommit }
+    $releaseTestCount++
+}
 $releaseTestPayload = Join-Path $releaseTestDirectory 'sample.zip'
 $releaseTestChecksum = "$releaseTestPayload.sha256"
 [IO.File]::WriteAllText($releaseTestPayload, 'test payload', $releaseTestUtf8)
@@ -91,16 +114,16 @@ function New-ReleaseTestArchive {
         $releaseTestEntry = $releaseTestArchive.CreateEntry('BUILD-INFO.json')
         $releaseTestWriter = [IO.StreamWriter]::new($releaseTestEntry.Open(), $releaseTestUtf8)
         try {
-            $releaseTestWriter.Write((@{ name = 'PyRudder'; version = '0.1.0-alpha.7'; source_commit = $releaseTestCommit; source_dirty = $Dirty } | ConvertTo-Json))
+            $releaseTestWriter.Write((@{ name = 'PyRudder'; version = $releaseValidationVersion; source_commit = $releaseTestCommit; source_dirty = $Dirty } | ConvertTo-Json))
         } finally { $releaseTestWriter.Dispose() }
     } finally { $releaseTestArchive.Dispose() }
     $releaseTestArchivePath
 }
 $releaseTestCleanArchive = New-ReleaseTestArchive -Dirty $false
 $releaseTestDirtyArchive = New-ReleaseTestArchive -Dirty $true
-Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version '0.1.0-alpha.7' -Commit $releaseTestCommit
-Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version '0.1.0' -Commit $releaseTestCommit }
-Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version '0.1.0-alpha.7' -Commit $releaseTestOtherCommit }
-Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestDirtyArchive -Version '0.1.0-alpha.7' -Commit $releaseTestCommit }
+Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version $releaseValidationVersion -Commit $releaseTestCommit
+Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version $releaseValidationOtherVersion -Commit $releaseTestCommit }
+Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version $releaseValidationVersion -Commit $releaseTestOtherCommit }
+Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestDirtyArchive -Version $releaseValidationVersion -Commit $releaseTestCommit }
 $releaseTestCount += 4
 Write-Output "Release safeguards: $releaseTestCount checks passed / 发布保护：$releaseTestCount 项通过"

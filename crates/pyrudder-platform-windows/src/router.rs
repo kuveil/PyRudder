@@ -122,6 +122,7 @@ pub fn execute(
     arguments: &[OsString],
 ) -> Result<NativeExitCode> {
     location.validate()?;
+    let _installation_access = crate::installation::shared_access(location)?;
     let registry = Registry::new(&location.config_dir)?;
     let cwd = std::env::current_dir().map_err(|_| invalid("Cannot read working directory"))?;
     let shell = if explicit.is_some() {

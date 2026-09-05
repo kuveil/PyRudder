@@ -81,7 +81,7 @@ fn copy_new_or_identical(source: &Path, destination: &Path) -> Result<()> {
         }
         return Err(Error::new(
             ErrorKind::Conflict,
-            "Installation destination contains a different binary; use a new install directory for this test build",
+            "Installation destination contains a different binary; use the Setup installer to update it. / 安装目录包含不同的程序文件，请使用安装包更新。",
         ));
     }
     let mut input = fs::File::open(source).map_err(|_| usage("Cannot open setup source binary"))?;

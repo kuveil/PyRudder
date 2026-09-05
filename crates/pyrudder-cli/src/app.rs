@@ -4,6 +4,8 @@
 mod available;
 mod config;
 mod download_progress;
+pub(crate) mod installer;
+mod installer_transaction;
 mod managed;
 mod path;
 mod setup;
@@ -50,26 +52,47 @@ pub(crate) struct App {
     registry: Registry,
     progress: bool,
     interactive: bool,
+    _installation_access: Option<FileLease>,
+}
+
+fn configuration_sources(arguments: &Arguments) -> (ConfigEnvironment, ConfigOverrides) {
+    let mut environment = ConfigEnvironment::capture();
+    if let Some(home) = &arguments.home {
+        environment.home = Some(home.clone());
+    }
+    let mut overrides = ConfigOverrides {
+        paths: PathOverrides {
+            install_dir: arguments.install_dir.clone(),
+            runtimes_dir: arguments.runtimes_dir.clone(),
+            downloads_dir: arguments.downloads_dir.clone(),
+            cache_dir: arguments.cache_dir.clone(),
+            temp_dir: arguments.temp_dir.clone(),
+            shims_dir: arguments.shims_dir.clone(),
+            config_dir: arguments.config_dir.clone(),
+        },
+        system_fallback: None,
+    };
+    if let Some(Action::Installer { root, .. }) = &arguments.command {
+        // Installer identity comes from its explicit root, never inherited environment.
+        // 安装器身份只由显式根目录决定，绝不读取继承的环境覆盖。
+        environment = ConfigEnvironment {
+            home: Some(root.clone()),
+            ..ConfigEnvironment::default()
+        };
+        overrides = ConfigOverrides {
+            paths: PathOverrides {
+                config_dir: Some(root.join("config")),
+                ..PathOverrides::default()
+            },
+            system_fallback: None,
+        };
+    }
+    (environment, overrides)
 }
 
 impl App {
     pub(crate) fn load(arguments: &Arguments) -> Result<Self> {
-        let mut environment = ConfigEnvironment::capture();
-        if let Some(home) = &arguments.home {
-            environment.home = Some(home.clone());
-        }
-        let mut overrides = ConfigOverrides {
-            paths: PathOverrides {
-                install_dir: arguments.install_dir.clone(),
-                runtimes_dir: arguments.runtimes_dir.clone(),
-                downloads_dir: arguments.downloads_dir.clone(),
-                cache_dir: arguments.cache_dir.clone(),
-                temp_dir: arguments.temp_dir.clone(),
-                shims_dir: arguments.shims_dir.clone(),
-                config_dir: arguments.config_dir.clone(),
-            },
-            system_fallback: None,
-        };
+        let (mut environment, mut overrides) = configuration_sources(arguments);
         if overrides.paths.config_dir.is_none()
             && environment.paths.config_dir.is_none()
             && environment.home.is_none()
@@ -128,6 +151,11 @@ impl App {
             install_dir: paths.install_dir.clone(),
         };
         location.validate()?;
+        let installation_access = if matches!(arguments.command, Some(Action::Installer { .. })) {
+            None
+        } else {
+            pyrudder_platform_windows::installation::shared_access(&location)?
+        };
         let registry = Registry::new(&paths.config_dir)?;
         if WindowsStateFileSystem
             .read_file(&paths.config_dir.join("pyrudder-location.json"), 65_536)?
@@ -148,11 +176,15 @@ impl App {
                 && io::stdin().is_terminal()
                 && io::stdout().is_terminal()
                 && io::stderr().is_terminal(),
+            _installation_access: installation_access,
         })
     }
 
     pub(crate) fn execute(&self, action: &Action) -> Result<Outcome> {
         let data = match action {
+            Action::Installer { .. } => {
+                return Err(usage("Installer action requires its dedicated entry point"));
+            }
             Action::Setup { add_to_path } => return self.setup(*add_to_path),
             Action::Path { action } => self.path(action)?,
             Action::SystemPath { owner_sid, remove } => {

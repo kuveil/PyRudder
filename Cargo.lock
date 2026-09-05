@@ -806,7 +806,7 @@ dependencies = [
 
 [[package]]
 name = "pyrudder-cli"
-version = "0.1.0-alpha.7"
+version = "0.1.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -825,7 +825,7 @@ dependencies = [
 
 [[package]]
 name = "pyrudder-core"
-version = "0.1.0-alpha.7"
+version = "0.1.0"
 dependencies = [
  "serde",
  "toml",
@@ -833,7 +833,7 @@ dependencies = [
 
 [[package]]
 name = "pyrudder-platform-windows"
-version = "0.1.0-alpha.7"
+version = "0.1.0"
 dependencies = [
  "junction",
  "pyrudder-core",
@@ -846,7 +846,7 @@ dependencies = [
 
 [[package]]
 name = "pyrudder-provider-pythonorg"
-version = "0.1.0-alpha.7"
+version = "0.1.0"
 dependencies = [
  "pyrudder-core",
  "pyrudder-platform-windows",
@@ -860,7 +860,7 @@ dependencies = [
 
 [[package]]
 name = "pyrudder-shim-console"
-version = "0.1.0-alpha.7"
+version = "0.1.0"
 dependencies = [
  "pyrudder-core",
  "pyrudder-platform-windows",
@@ -868,7 +868,7 @@ dependencies = [
 
 [[package]]
 name = "pyrudder-shim-gui"
-version = "0.1.0-alpha.7"
+version = "0.1.0"
 dependencies = [
  "pyrudder-core",
  "pyrudder-platform-windows",
@@ -1798,7 +1798,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.1.0-alpha.7"
+version = "0.1.0"
 dependencies = [
  "pyrudder-core",
  "pyrudder-platform-windows",
