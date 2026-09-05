@@ -139,6 +139,10 @@ This version does not support overwrite upgrades, automatic migration, or multip
 
 See `pyrudder --help` or `pyrudder <command> --help` for more options. Before reporting an issue, review diagnostics and remove personal paths, account information, and other sensitive data.
 
+## Contributing
+
+Issues, documentation improvements, and code contributions are welcome. See the [contribution guide](https://github.com/kuveil/PyRudder/blob/master/CONTRIBUTING_EN.md) for branches, local checks, and pull requests. Start everyday work from `develop` and target ordinary PRs at `develop`.
+
 ## License
 
 PyRudder uses the [Apache License 2.0](LICENSE). Bundled third-party dependencies retain their respective licenses.

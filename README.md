@@ -139,6 +139,10 @@ ZIP 用户先执行 `pyrudder path remove` 撤销本安装的 PATH 修改，再�
 
 更多参数见 `pyrudder --help` 或 `pyrudder <命令> --help`。提交问题前，请检查诊断内容并移除个人路径、账户信息及其他敏感数据。
 
+## 参与贡献
+
+欢迎提交问题、文档和代码改进。分支协作、本地检查及 PR 提交方式见[贡献指南](https://github.com/kuveil/PyRudder/blob/master/CONTRIBUTING.md)；日常开发以 `develop` 为基线，普通 PR 请提交到 `develop`。
+
 ## 许可证
 
 PyRudder 使用 [Apache License 2.0](LICENSE)。随附的第三方依赖遵循各自的许可证。
