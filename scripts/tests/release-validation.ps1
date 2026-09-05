@@ -10,6 +10,9 @@ $releaseValidationManifest = Join-Path $PSScriptRoot '../../Cargo.toml'
 $releaseValidationText = Get-Content -LiteralPath $releaseValidationManifest -Raw
 $releaseValidationVersion = [regex]::Match($releaseValidationText, '(?m)^version\s*=\s*"([^"\r\n]+)"').Groups[1].Value
 if (-not $releaseValidationVersion) { throw 'Cannot read test version / 无法读取测试版本' }
+# Mismatch fixtures must remain different when the workspace version changes.
+# 工作区版本变化后，不匹配测试值仍须与其保持不同。
+$releaseValidationOtherVersion = if ($releaseValidationVersion -ceq '0.0.0') { '0.0.1' } else { '0.0.0' }
 foreach ($releaseValidationPrefix in @('release/')) {
     $releaseValidationResult = & $releaseValidationScript -Ref "refs/heads/$releaseValidationPrefix$releaseValidationVersion"
     if ($releaseValidationResult.Version -cne $releaseValidationVersion -or $releaseValidationResult.Tag -cne "v$releaseValidationVersion") {
@@ -19,7 +22,7 @@ foreach ($releaseValidationPrefix in @('release/')) {
 foreach ($releaseValidationRef in @(
     'refs/heads/master', 'refs/heads/main', 'refs/heads/feature/example',
     "refs/tags/v$releaseValidationVersion", "refs/heads/release/v$releaseValidationVersion",
-    'refs/heads/release/0.0.0', "refs/heads/release/$releaseValidationVersion/extra",
+    "refs/heads/release/$releaseValidationOtherVersion", "refs/heads/release/$releaseValidationVersion/extra",
     "refs/heads/RELEASE/$releaseValidationVersion", "refs/heads/release/$releaseValidationVersion`n"
 )) {
     $releaseValidationRejected = $false
@@ -71,7 +74,7 @@ $releaseTestRemote = [pscustomobject]@{
 }
 Assert-ReleaseIdentity -Release $releaseTestRemote -Tag $releaseTestTag -Commit $releaseTestCommit
 Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestRemote -Tag $releaseTestTag -Commit $releaseTestOtherCommit }
-Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestRemote -Tag 'v0.1.0' -Commit $releaseTestCommit }
+Assert-ReleaseTestRejected { Assert-ReleaseIdentity -Release $releaseTestRemote -Tag "v$releaseValidationOtherVersion" -Commit $releaseTestCommit }
 $releaseTestCount += 3
 foreach ($releaseTestField in @('tag_name', 'target_commitish', 'draft', 'prerelease', 'assets')) {
     $releaseTestInvalid = $releaseTestRemote | ConvertTo-Json -Depth 8 | ConvertFrom-Json
@@ -119,7 +122,7 @@ function New-ReleaseTestArchive {
 $releaseTestCleanArchive = New-ReleaseTestArchive -Dirty $false
 $releaseTestDirtyArchive = New-ReleaseTestArchive -Dirty $true
 Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version $releaseValidationVersion -Commit $releaseTestCommit
-Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version '0.1.0' -Commit $releaseTestCommit }
+Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version $releaseValidationOtherVersion -Commit $releaseTestCommit }
 Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestCleanArchive -Version $releaseValidationVersion -Commit $releaseTestOtherCommit }
 Assert-ReleaseTestRejected { Assert-ReleaseArchive -Path $releaseTestDirtyArchive -Version $releaseValidationVersion -Commit $releaseTestCommit }
 $releaseTestCount += 4

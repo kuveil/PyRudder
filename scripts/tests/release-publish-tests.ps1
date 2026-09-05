@@ -2,19 +2,24 @@
 # 使用本地传输模拟发布状态机，绝不请求 GitHub。
 #Requires -Version 7.0
 [CmdletBinding()]
-param()
+param([string]$Version)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $releaseMockScriptDirectory = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 . (Join-Path $releaseMockScriptDirectory 'release-common.ps1')
 $releaseMockVersion = [regex]::Match((Get-Content -LiteralPath (Join-Path $releaseMockScriptDirectory '../Cargo.toml') -Raw), '(?m)^version\s*=\s*"([^"\r\n]+)"').Groups[1].Value
+if ($Version) { $releaseMockVersion = $Version }
+$releaseMockPrerelease = $releaseMockVersion.Split('+')[0].Contains('-')
+$releaseMockOtherVersion = if ($releaseMockVersion -ceq '0.0.0') { '0.0.1' } else { '0.0.0' }
 $releaseMockCommit = '1234567890123456789012345678901234567890'
 $releaseMockOtherCommit = 'abcdefabcdefabcdefabcdefabcdefabcdefabcd'
 $releaseMockTag = "v$releaseMockVersion"
 $releaseMockRoot = Join-Path $releaseMockScriptDirectory ('../target/release-publish-tests/' + [Guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $releaseMockRoot -Force)
 $releaseMockUtf8 = [Text.UTF8Encoding]::new($false)
+$releaseMockManifest = Join-Path $releaseMockRoot 'Cargo.toml'
+[IO.File]::WriteAllText($releaseMockManifest, "[workspace.package]`nversion = `"$releaseMockVersion`"`n", $releaseMockUtf8)
 $releaseMockState = @{}
 $releaseMockScenarioCount = 0
 
@@ -30,7 +35,7 @@ function Reset-ReleaseMockState {
         $releaseMockState.TagCommit = $releaseMockCommit
         $releaseMockState.Release = [pscustomobject]@{
             id = 101; tag_name = $releaseMockTag; target_commitish = $releaseMockCommit
-            draft = $true; prerelease = $true; assets = @()
+            draft = $true; prerelease = $releaseMockPrerelease; assets = @()
         }
     }
 }
@@ -105,7 +110,7 @@ function Invoke-ReleaseMockTransport {
             }
             $releaseMockPageJson = ConvertTo-Json -InputObject @($releaseMockEntries) -Depth 8 -Compress
             if ($releaseMockState.ContainsKey('PageTwo')) {
-                return ('[[{"id":99,"tag_name":"v0.0.1"}],' + $releaseMockPageJson + ']')
+                return ('[[{"id":99,"tag_name":"v' + $releaseMockOtherVersion + '"}],' + $releaseMockPageJson + ']')
             }
             return ('[' + $releaseMockPageJson + ']')
         } elseif ($Arguments[1] -match '/releases/([1-9][0-9]*)$') {
@@ -131,7 +136,8 @@ function Invoke-ReleaseMockTransport {
                 throw 'Explicit source target required / 必须显式指定源码提交'
             }
             if ($Arguments -notcontains '--draft') { throw 'Creation must remain private until verified / 校验完成前发布必须保持草稿' }
-            $releaseMockState.Release = [pscustomobject]@{ id = 101; tag_name = $releaseMockTag; target_commitish = $releaseMockCommit; draft = $true; prerelease = $true; assets = @() }
+            if (($Arguments -contains '--prerelease') -ne $releaseMockPrerelease) { throw 'Incorrect draft prerelease flag / 草稿预发布标记错误' }
+            $releaseMockState.Release = [pscustomobject]@{ id = 101; tag_name = $releaseMockTag; target_commitish = $releaseMockCommit; draft = $true; prerelease = $releaseMockPrerelease; assets = @() }
             $releaseMockState.Mutations++
             $releaseMockState.Operations.Add('create-draft')
         }
@@ -155,10 +161,13 @@ function Invoke-ReleaseMockTransport {
             $releaseMockState.Operations.Add('upload')
         }
         'edit' {
-            if ($Arguments -notcontains '--draft=false' -or $Arguments -notcontains '--prerelease=true' -or $Arguments -notcontains '--latest=false') {
+            $releaseMockPrereleaseFlag = '--prerelease=' + $releaseMockPrerelease.ToString().ToLowerInvariant()
+            $releaseMockLatestFlag = '--latest=' + (-not $releaseMockPrerelease).ToString().ToLowerInvariant()
+            if ($Arguments -notcontains '--draft=false' -or $Arguments -notcontains $releaseMockPrereleaseFlag -or $Arguments -notcontains $releaseMockLatestFlag) {
                 throw 'Incorrect publication flags / 发布标记错误'
             }
             $releaseMockState.Release.draft = $false
+            $releaseMockState.Release.prerelease = $releaseMockPrerelease
             $releaseMockState.Mutations++
             $releaseMockState.Operations.Add('publish')
         }
@@ -180,6 +189,11 @@ if (-not $releaseMockFunction) { throw 'Missing network function / 缺少网络�
 $releaseMockReplacement = 'function Invoke-ReleaseGh { param([string[]]$Arguments, [switch]$AllowNotFound) Invoke-ReleaseMockTransport -Arguments $Arguments -AllowNotFound:$AllowNotFound }'
 $releaseMockText = $releaseMockText.Remove($releaseMockFunction.Extent.StartOffset, $releaseMockFunction.Extent.EndOffset - $releaseMockFunction.Extent.StartOffset).Insert($releaseMockFunction.Extent.StartOffset, $releaseMockReplacement)
 $releaseMockText = $releaseMockText.Replace('$PSScriptRoot', '$releaseMockScriptDirectory')
+# Use a private fixture manifest to cover release kinds without changing the workspace.
+# 使用私有测试清单覆盖不同发布类型，不修改工作区版本。
+$releaseMockVersionCall = "& (Join-Path `$releaseMockScriptDirectory 'release-version.ps1') -Ref `$Ref"
+if (-not $releaseMockText.Contains($releaseMockVersionCall)) { throw 'Missing version validation call / 缺少版本校验调用' }
+$releaseMockText = $releaseMockText.Replace($releaseMockVersionCall, "$releaseMockVersionCall -ManifestPath `$releaseMockManifest")
 $releaseMockPublish = [scriptblock]::Create($releaseMockText)
 $releaseMockFirstBundle = New-ReleaseMockBundle -Variant 'first' -SourceCommit $releaseMockCommit
 $releaseMockSecondBundle = New-ReleaseMockBundle -Variant 'rebuilt' -SourceCommit $releaseMockCommit
@@ -271,7 +285,7 @@ try {
         @{ Json = ''; Pattern = 'Empty draft release response' },
         @{ Json = 'null'; Pattern = 'Draft release identity changed' },
         @{ Json = ('{"id":102,"tag_name":"' + $releaseMockTag + '"}'); Pattern = 'Draft release identity changed' },
-        @{ Json = '{"id":101,"tag_name":"v0.0.1"}'; Pattern = 'Draft release identity changed' }
+        @{ Json = ('{"id":101,"tag_name":"v' + $releaseMockOtherVersion + '"}'); Pattern = 'Draft release identity changed' }
     )) {
         Reset-ReleaseMockState -Draft
         $releaseMockState.ByIdResponse = $releaseMockInvalidById.Json
@@ -324,7 +338,7 @@ function Get-ReleaseRemote {
     if ($releaseMockState.DraftTagMisses -ne 1 -or $releaseMockState.ListReads -ne 0 -or $releaseMockState.Files.Count -ne 0) {
         throw 'Legacy failure did not reproduce the draft lookup bug / 旧版失败未复现草稿查询缺陷'
     }
-    Write-Output "Publication simulation: $releaseMockScenarioCount scenarios passed; legacy failure reproduced; no network access / 发布模拟：$releaseMockScenarioCount 种场景通过，已复现旧版缺陷，未访问网络"
+    Write-Output "Publication simulation ($releaseMockVersion): $releaseMockScenarioCount scenarios passed; legacy failure reproduced; no network access / 发布模拟（$releaseMockVersion）：$releaseMockScenarioCount 种场景通过，已复现旧版缺陷，未访问网络"
 } finally {
     $env:GH_TOKEN = $releaseMockSavedToken
     $env:GITHUB_STEP_SUMMARY = $releaseMockSavedSummary
