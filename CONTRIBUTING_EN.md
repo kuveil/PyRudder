@@ -5,7 +5,7 @@
 
 # Contributing
 
-Issues, documentation improvements, and code contributions are welcome. Discuss substantial features in an issue first to agree on scope and compatibility. For usage, see the [README](./README_EN.md).
+Issues, documentation improvements, and code contributions are welcome. Discuss substantial features in an issue first to agree on scope and compatibility. For usage, see the [README](./README.md).
 
 ## Branches and merge directions
 
@@ -73,7 +73,7 @@ Use commit messages in the form `type(scope): feature or fix`, such as `fix(shim
 
 ## Documentation, privacy, and licensing
 
-- Maintain separate Chinese and English public documents with language links at the top. Update both usage guides when user-visible behavior changes.
+- Maintain separate Chinese and English public documents with language links at the top: `README.md` is the default English guide, and `README_ZH.md` is the Chinese guide. Update both usage guides when user-visible behavior changes.
 - Write new or changed code comments in Chinese and English, explaining constraints, reasons, and behavior that is easy to misuse.
 - Do not commit local requirements, plans, progress notes, history backups, or other development records under `local-docs/`. Do not commit build artifacts or test data under `target/`.
 - Do not commit credentials, personal email addresses, local usernames, real installation paths, private diagnostic output, or sensitive screenshot content. Use generic placeholders in examples and inspect `git diff --cached` before committing.

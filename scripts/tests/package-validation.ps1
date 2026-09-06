@@ -64,4 +64,29 @@ foreach ($workspacePath in @('E:/private/project', 'D:/different/project')) {
 $metadata.resolve.nodes[0].dependencies = @('missing-node')
 Assert-PackageRejected { Get-PackageBom -Metadata $metadata -Version '1.0.0' }
 $testCount++
+# Keep the repository and packaged language navigation aligned.
+# 保持仓库与发行包的语言导航一致。
+$readmeRepository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$readmePackageScript = Get-Content -LiteralPath (Join-Path $readmeRepository 'scripts/package.ps1') -Raw -Encoding UTF8
+$readmeInstallerScript = Get-Content -LiteralPath (Join-Path $readmeRepository 'scripts/installer/pyrudder.iss') -Raw -Encoding UTF8
+$readmeReleaseScript = Get-Content -LiteralPath (Join-Path $readmeRepository 'scripts/release-publish.ps1') -Raw -Encoding UTF8
+foreach ($readmeCase in @(
+    @{ File = 'README.md'; Language = 'English'; Other = 'README_ZH.md'; Heading = 'Update an existing installation'; Anchor = 'update-an-existing-installation' },
+    @{ File = 'README_ZH.md'; Language = '简体中文'; Other = 'README.md'; Heading = '更新已有安装'; Anchor = '更新已有安装' }
+)) {
+    $readmeText = Get-Content -LiteralPath (Join-Path $readmeRepository $readmeCase.File) -Raw -Encoding UTF8
+    if (-not $readmeText.Contains("<strong>$($readmeCase.Language)</strong>") -or
+        -not $readmeText.Contains(('href="./{0}"' -f $readmeCase.Other)) -or
+        -not $readmeText.Contains("### $($readmeCase.Heading)")) {
+        throw 'README language navigation is inconsistent / README 语言导航不一致'
+    }
+    if (-not $readmePackageScript.Contains("'$($readmeCase.File)'") -or
+        -not $readmeInstallerScript.Contains(('Source: "{#PayloadDir}\' + $readmeCase.File + '"'))) {
+        throw 'A translated README is missing from the distribution / 发行物缺少对应语言 README'
+    }
+    if (-not $readmeReleaseScript.Contains("/$($readmeCase.File)#$($readmeCase.Anchor)")) {
+        throw 'Release guide points to the wrong README / 发布指南指向错误的 README'
+    }
+    $testCount++
+}
 Write-Output "Package validation passed: $testCount checks / 发行包验证通过：$testCount 项"
