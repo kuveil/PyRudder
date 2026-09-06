@@ -70,7 +70,7 @@ Name: "systempath"; Description: "{cm:SystemPathTask}"; GroupDescription: "{cm:S
 Source: "{#PayloadDir}\bin\pyrudder.exe"; DestName: "pyrudder-installer-helper.exe"; Flags: dontcopy noencryption
 Source: "{#PayloadDir}\bin\*.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
 Source: "{#PayloadDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#PayloadDir}\README_EN.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\README_ZH.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\NOTICE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion

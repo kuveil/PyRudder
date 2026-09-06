@@ -34,8 +34,10 @@ const MAX_TOTAL: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_ENTRIES: usize = 131_104;
 const REPARSE_POINT: u32 = 0x400;
 
-// Fixed distribution files and uninstall metadata; never enumerate the installation root.
-// 固定分发文件及卸载元数据；绝不遍历安装根目录。
+// Required schema-1 entries from 0.1.0; retain legacy names so unfinished journals stay readable.
+// 0.1.0 的 schema-1 必需项；保留旧文件名，确保未完成的旧日志仍可恢复。
+// Never enumerate the installation root or rewrite an existing journal's entry order.
+// 绝不遍历安装根目录，也不重排已有日志条目。
 const FIXED_FILES: &[&str] = &[
     "bin/pyrudder.exe",
     "bin/pyrudder-shim-console.exe",
@@ -60,6 +62,10 @@ const FIXED_FILES: &[&str] = &[
     "shims/pyrudder-publication.json",
     "config/registry.json",
 ];
+
+// New transactions always capture these files, but older schema-1 journals may omit them.
+// 新事务始终记录这些文件；较早的 schema-1 日志可以不包含它们。
+const OPTIONAL_FIXED_FILES: &[&str] = &["README_ZH.md"];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -205,7 +211,7 @@ fn owned_shims(location: &Location, snapshot: &Snapshot) -> Result<BTreeMap<Stri
             .or_default()
             .push(record.sha256);
     }
-    if owned.len() > MAX_ENTRIES - FIXED_FILES.len() {
+    if owned.len() > MAX_ENTRIES - FIXED_FILES.len() - OPTIONAL_FIXED_FILES.len() {
         return Err(failure("Too many owned upgrade shim files"));
     }
     Ok(owned)
@@ -263,7 +269,9 @@ fn load(root: &Path, directory: &Path) -> Result<Journal> {
     let mut paths = BTreeSet::new();
     let mut total = 0_u64;
     for entry in &journal.entries {
-        if !FIXED_FILES.contains(&entry.relative.as_str()) {
+        if !FIXED_FILES.contains(&entry.relative.as_str())
+            && !OPTIONAL_FIXED_FILES.contains(&entry.relative.as_str())
+        {
             let name = entry
                 .relative
                 .strip_prefix("shims/")
@@ -373,6 +381,7 @@ fn prepare_entries(root: &Path, location: &Location, snapshot: &Snapshot) -> Res
     }
     let mut relatives: Vec<_> = FIXED_FILES
         .iter()
+        .chain(OPTIONAL_FIXED_FILES)
         .map(|value| (*value).to_owned())
         .collect();
     relatives.extend(names.into_iter().map(|name| format!("shims/{name}")));
@@ -691,6 +700,145 @@ mod tests {
             );
         }
         assert!(!root.path().join(BACKUP_DIRECTORY).exists());
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_journal_without_chinese_readme_preserves_backup_indices() -> Result<()> {
+        let (root, location) = fixture()?;
+        let shim = location.shims_dir.join("python.exe");
+        fs::write(&shim, "old-shim").map_err(|_| failure("Fixture write"))?;
+        let registry = Registry::new(&location.config_dir)?;
+        let mut transaction = registry.transaction()?;
+        transaction.snapshot.shims.push(PublishedShim {
+            filename: "python.exe".into(),
+            request_name: "python".into(),
+            exact: false,
+            gui: false,
+            sha256: sha256_file(&shim, MAX_FILE as u64)?,
+        });
+        transaction.commit()?;
+        let original_registry = fs::read(location.config_dir.join("registry.json")).ok();
+        let mut entries = prepare_entries(root.path(), &location, &registry.load()?)?;
+        // Construct the old layout before writing indexed blobs, as the 0.1.0 helper did.
+        // 在写入编号备份前构造旧布局，与 0.1.0 辅助程序保持一致。
+        entries.retain(|entry| !OPTIONAL_FIXED_FILES.contains(&entry.relative.as_str()));
+        let original_order: Vec<_> = entries.iter().map(|entry| entry.relative.clone()).collect();
+        let directory = root.path().join(BACKUP_DIRECTORY);
+        fs::create_dir(&directory).map_err(|_| failure("Fixture directory"))?;
+        let journal = Journal {
+            schema_version: 1,
+            root: root.path().to_path_buf(),
+            location: location.clone(),
+            from_version: "0.1.0".into(),
+            phase: Phase::Prepared,
+            entries,
+        };
+        save(&directory, &journal)?;
+        copy_backups(root.path(), &directory, &journal)?;
+        assert_eq!(
+            load(root.path(), &directory)?
+                .entries
+                .into_iter()
+                .map(|entry| entry.relative)
+                .collect::<Vec<_>>(),
+            original_order
+        );
+        for name in ["README.md", "README_EN.md", "config/registry.json"] {
+            fs::write(target(root.path(), name), "new-content")
+                .map_err(|_| failure("Fixture write"))?;
+        }
+        fs::write(&shim, "new-shim").map_err(|_| failure("Fixture write"))?;
+        fs::write(root.path().join("README_ZH.md"), "not-in-old-transaction")
+            .map_err(|_| failure("Fixture write"))?;
+        rollback(root.path())?;
+        for name in ["README.md", "README_EN.md"] {
+            assert_eq!(
+                fs::read(root.path().join(name)).ok(),
+                Some(format!("old:{name}").into_bytes())
+            );
+        }
+        assert_eq!(fs::read(&shim).ok(), Some(b"old-shim".to_vec()));
+        assert_eq!(
+            fs::read(location.config_dir.join("registry.json")).ok(),
+            original_registry
+        );
+        assert_eq!(
+            fs::read(root.path().join("README_ZH.md")).ok(),
+            Some(b"not-in-old-transaction".to_vec())
+        );
+        assert!(!directory.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn rollback_tracks_optional_readme_presence_and_preserves_legacy_readmes() -> Result<()> {
+        for already_present in [false, true] {
+            let (root, location) = fixture()?;
+            let chinese = root.path().join("README_ZH.md");
+            if already_present {
+                fs::write(&chinese, "old-chinese").map_err(|_| failure("Fixture write"))?;
+            }
+            prepare(root.path(), &location, "0.1.0")?;
+            let journal = load(root.path(), &root.path().join(BACKUP_DIRECTORY))?;
+            let entry = journal
+                .entries
+                .iter()
+                .find(|entry| entry.relative == "README_ZH.md")
+                .ok_or_else(|| failure("New transaction omitted the Chinese README"))?;
+            assert_eq!(entry.sha256.is_some(), already_present);
+            if !already_present {
+                assert_eq!(entry.size, 0);
+            }
+            fs::write(&chinese, "new-chinese").map_err(|_| failure("Fixture write"))?;
+            fs::write(root.path().join("README.md"), "new-english")
+                .map_err(|_| failure("Fixture write"))?;
+            fs::remove_file(root.path().join("README_EN.md"))
+                .map_err(|_| failure("Fixture removal"))?;
+            rollback(root.path())?;
+            assert_eq!(
+                fs::read(&chinese).ok(),
+                already_present.then(|| b"old-chinese".to_vec())
+            );
+            for name in ["README.md", "README_EN.md"] {
+                assert_eq!(
+                    fs::read(root.path().join(name)).ok(),
+                    Some(format!("old:{name}").into_bytes())
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn optional_readme_does_not_allow_unknown_files_or_missing_legacy_entries() -> Result<()> {
+        let (root, location) = fixture()?;
+        prepare(root.path(), &location, "0.1.0")?;
+        let directory = root.path().join(BACKUP_DIRECTORY);
+        let mut journal = load(root.path(), &directory)?;
+        fs::write(root.path().join("README.md"), "new-english")
+            .map_err(|_| failure("Fixture write"))?;
+        let unknown = root.path().join("README_FR.md");
+        fs::write(&unknown, "unrelated").map_err(|_| failure("Fixture write"))?;
+        journal.entries.push(Entry {
+            relative: "README_FR.md".into(),
+            sha256: None,
+            size: 0,
+        });
+        save(&directory, &journal)?;
+        assert!(rollback(root.path()).is_err());
+        assert_eq!(fs::read(&unknown).ok(), Some(b"unrelated".to_vec()));
+        assert_eq!(
+            fs::read(root.path().join("README.md")).ok(),
+            Some(b"new-english".to_vec())
+        );
+        journal.entries.pop();
+        journal
+            .entries
+            .retain(|entry| entry.relative != "README_EN.md");
+        save(&directory, &journal)?;
+        assert!(rollback(root.path()).is_err());
+        assert!(directory.exists());
         Ok(())
     }
 
