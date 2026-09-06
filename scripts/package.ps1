@@ -77,7 +77,7 @@ try {
         Copy-Item -LiteralPath $packageInput -Destination (Join-Path $packageDirectory "bin/$packageBinary")
     }
     Copy-Item -LiteralPath (Join-Path $packageRepository 'scripts/distribution/pyrudder-layout.json') -Destination (Join-Path $packageDirectory 'bin')
-    foreach ($packageReadme in @('README.md', 'README_EN.md', 'LICENSE', 'NOTICE')) {
+    foreach ($packageReadme in @('README.md', 'README_ZH.md', 'LICENSE', 'NOTICE')) {
         Copy-Item -LiteralPath (Join-Path $packageRepository $packageReadme) -Destination $packageDirectory
     }
     $packageAssets = Join-Path $packageDirectory 'assets'
